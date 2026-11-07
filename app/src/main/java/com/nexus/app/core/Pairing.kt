@@ -1,6 +1,7 @@
 package com.nexus.app.core
 
 import java.net.URI
+import java.net.URISyntaxException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -55,7 +56,11 @@ class PairingCoordinator(
     }
 
     fun parse(payload: String): PairingInvitation? {
-        val uri = runCatching { URI(payload) }.getOrNull() ?: return null
+        val uri = try {
+            URI(payload)
+        } catch (_: URISyntaxException) {
+            return null
+        }
         if (uri.scheme != "nexus" || uri.host != "pair") return null
         val query = uri.rawQuery?.split('&')
             ?.mapNotNull { item ->
@@ -82,8 +87,15 @@ class PairingCoordinator(
 
     fun validate(invitation: PairingInvitation, localRole: DeviceRole): PairingValidation {
         if (invitation.role == localRole) return PairingValidation.SAME_ROLE
-        if (invitation.expiresAtEpochMillis <= now()) return PairingValidation.EXPIRED
+        val currentTime = now()
+        if (invitation.expiresAtEpochMillis <= currentTime) return PairingValidation.EXPIRED
+        if (invitation.expiresAtEpochMillis - currentTime > PAIRING_INVITATION_LIFETIME_MILLIS) {
+            return PairingValidation.MALFORMED
+        }
         if (invitation.id in consumedInvitationIds) return PairingValidation.DUPLICATE
+        if (runCatching { Base64.getUrlDecoder().decode(invitation.token).size }.getOrNull() != 32) {
+            return PairingValidation.MALFORMED
+        }
         val issuedHash = locallyIssuedTokenHashes[invitation.id]
         if (issuedHash != null && !MessageDigest.isEqual(issuedHash, sha256(invitation.token))) {
             return PairingValidation.MALFORMED
