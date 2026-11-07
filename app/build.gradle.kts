@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "com.nexus.app"
-            minSdk = 27
+        6
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
