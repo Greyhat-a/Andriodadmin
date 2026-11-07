@@ -4,7 +4,19 @@
 
 Android multi-device management app (ADMIN and USER roles in one APK). Kotlin, Jetpack Compose, Material 3.
 
-**Current state: Phase 1 of 10 (foundation).** The app installs, follows the system light/dark theme, and has five-tab navigation. Devices, Map, Files and Academy are honest placeholders that say which phase will build them. There is no backend, pairing, temporary ADMIN or remote control yet. See `docs/ARCHITECTURE.md` for the full plan and `docs/BUILD_REPORT.md` for what has and has not been verified.
+**Current state: Phase 1 of 10 (foundation).** The app follows the system light/dark theme and has five-tab navigation. Devices, Map, Files and Academy identify the features planned for later phases. There is no backend, pairing, temporary ADMIN or remote control yet. See `docs/ARCHITECTURE.md` for the full plan and `docs/BUILD_REPORT.md` for verified build status.
+
+## Architecture
+
+The Android client is a single `:app` module using Kotlin, Jetpack Compose, Material 3 and Navigation Compose. `MainActivity` hosts `NexusApp`; top-level destinations are defined in `ui/navigation`, shared UI in `ui/screens`, theme and palettes in `ui/theme`, and phase metadata in `core`. The current build is a UI foundation; backend and device-management features remain planned.
+
+## Development requirements
+
+- JDK 17
+- Android SDK platform 35 and Android build-tools 35.0.0
+- Gradle Wrapper 8.14.3 (downloads automatically on first use)
+
+The Android Gradle Plugin is 8.9.1 and Kotlin / Compose compiler plugin are 2.0.21. See `docs/TOOLCHAIN.md` for the pinned configuration.
 
 ## Repository layout
 
@@ -20,20 +32,21 @@ The repository root is the folder containing `gradlew`. Push this folder's conte
 
 ## Build locally
 
-Requirements: JDK 17 and the Android SDK (API 35 platform and build tools; set `ANDROID_HOME`).
+Requirements: JDK 17 and the Android SDK (API 35 platform and build-tools 35.0.0; set `ANDROID_HOME`).
 
 ```bash
-chmod +x ./gradlew
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
+bash ./gradlew --version
+bash ./gradlew clean
+bash ./gradlew testDebugUnitTest
+bash ./gradlew assembleDebug
 # APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## Build on GitHub
 
-1. Create an empty repository and push this project so `gradlew` sits at the repository root.
-2. Open the **Actions** tab. The *Android CI* workflow runs on every push to `main`.
-3. Download the APK from the run's **Artifacts** section (`nexus-debug-apk`). It is debug-signed and installable on a phone with "install unknown apps" allowed.
+1. Push this project to GitHub. The *Android CI* workflow runs on pushes to `main` and pull requests.
+2. Open the successful workflow run in the **Actions** tab.
+3. Download **Androidecosystems-debug-apk** from the run's **Artifacts** section. It contains `app-debug.apk`, debug-signed and installable on a phone with "install unknown apps" allowed.
 
 Lint runs as a separate job so a lint finding never blocks the APK.
 
