@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -32,12 +33,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalViewModelStoreOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStoreOwner
-import com.google.android.gms.code.GmsBarcodeScanning
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.nexus.app.core.Device
@@ -58,11 +59,7 @@ fun DevicesScreen(
     pairingCoordinator: PairingCoordinator,
     modifier: Modifier = Modifier,
 ) {
-    val owner: ViewModelStoreOwner = LocalViewModelStoreOwner.current
-        ?: error("A lifecycle owner is required to show Devices.")
-    val viewModel = remember(owner, repository) {
-        ViewModelProvider(owner, DeviceViewModelFactory(repository))[DeviceViewModel::class.java]
-    }
+    val viewModel: DeviceViewModel = viewModel(factory = DeviceViewModelFactory(repository))
     val devices by viewModel.devices.collectAsState()
     val error by viewModel.error.collectAsState()
     var query by remember { mutableStateOf("") }
@@ -100,7 +97,10 @@ fun DevicesScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Button(onClick = { showAdd = true }) { Text("Add device") }
             OutlinedButton(onClick = { showPairing = true }) { Text("Pair device") }
         }
@@ -158,7 +158,12 @@ fun DevicesScreen(
             initialRole = DeviceRole.USER,
             onDismiss = { showAdd = false },
             onSave = { name, model, role ->
-                if (viewModel.register(name, model, role)) showAdd = false
+                if (viewModel.register(name, model, role)) {
+                    showAdd = false
+                    null
+                } else {
+                    viewModel.error.value
+                }
             },
         )
     }
@@ -168,10 +173,20 @@ fun DevicesScreen(
             device = device,
             onDismiss = { selectedDevice = null },
             onSave = { updated ->
-                if (viewModel.update(updated)) selectedDevice = updated
+                if (viewModel.update(updated)) {
+                    selectedDevice = updated
+                    null
+                } else {
+                    viewModel.error.value
+                }
             },
             onDelete = { id ->
-                if (viewModel.remove(id)) selectedDevice = null
+                if (viewModel.remove(id)) {
+                    selectedDevice = null
+                    null
+                } else {
+                    viewModel.error.value
+                }
             },
         )
     }
@@ -183,7 +198,7 @@ fun DevicesScreen(
 
 private class DeviceViewModelFactory(
     private val repository: com.nexus.app.core.DeviceRepository,
-) : ViewModelProvider.Factory {
+) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(DeviceViewModel::class.java))
@@ -241,11 +256,12 @@ private fun DeviceFormDialog(
     initialModel: String,
     initialRole: DeviceRole,
     onDismiss: () -> Unit,
-    onSave: (String, String, DeviceRole) -> Unit,
+    onSave: (String, String, DeviceRole) -> String?,
 ) {
     var name by remember { mutableStateOf(initialName) }
     var model by remember { mutableStateOf(initialModel) }
     var role by remember { mutableStateOf(initialRole) }
+    var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -254,9 +270,14 @@ private fun DeviceFormDialog(
                 OutlinedTextField(name, { name = it }, label = { Text("Device name") }, singleLine = true)
                 OutlinedTextField(model, { model = it }, label = { Text("Model") }, singleLine = true)
                 RoleSelector(role, onRole = { role = it })
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { Button(onClick = { onSave(name, model, role) }) { Text("Save") } },
+        confirmButton = {
+            Button(onClick = {
+                error = onSave(name, model, role)
+            }) { Text("Save") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
@@ -265,14 +286,15 @@ private fun DeviceFormDialog(
 private fun DeviceDetailsDialog(
     device: Device,
     onDismiss: () -> Unit,
-    onSave: (Device) -> Unit,
-    onDelete: (String) -> Unit,
+    onSave: (Device) -> String?,
+    onDelete: (String) -> String?,
 ) {
     var editing by remember(device.id) { mutableStateOf(false) }
     var confirmingDelete by remember(device.id) { mutableStateOf(false) }
     var name by remember(device.id) { mutableStateOf(device.name) }
     var model by remember(device.id) { mutableStateOf(device.model) }
     var role by remember(device.id) { mutableStateOf(device.role) }
+    var dialogError by remember(device.id) { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (editing) "Edit device" else device.name) },
@@ -294,11 +316,15 @@ private fun DeviceDetailsDialog(
                     Text("Device ID", style = MaterialTheme.typography.labelLarge)
                     Text(device.id, style = MaterialTheme.typography.bodySmall)
                 }
+                dialogError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             if (editing) {
-                Button(onClick = { onSave(device.copy(name = name, model = model, role = role)) }) { Text("Save") }
+                Button(onClick = {
+                    dialogError = onSave(device.copy(name = name, model = model, role = role))
+                    if (dialogError == null) editing = false
+                }) { Text("Save") }
             } else {
                 TextButton(onClick = { editing = true }) { Text("Edit") }
             }
@@ -320,7 +346,10 @@ private fun DeviceDetailsDialog(
             title = { Text("Remove ${device.name}?") },
             text = { Text("This deletes the local device profile from this phone. It does not disconnect a remote device.") },
             confirmButton = {
-                Button(onClick = { confirmingDelete = false; onDelete(device.id) }) { Text("Remove device") }
+                Button(onClick = {
+                    dialogError = onDelete(device.id)
+                    confirmingDelete = false
+                }) { Text("Remove device") }
             },
             dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text("Cancel") } },
         )
@@ -396,11 +425,17 @@ private fun PairingDialog(pairingCoordinator: PairingCoordinator, onDismiss: () 
                 OutlinedButton(onClick = {
                     error = null
                     try {
-                        GmsBarcodeScanning.getClient(context).startScan()
+                        val options = GmsBarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                            .build()
+                        GmsBarcodeScanning.getClient(context, options).startScan()
                             .addOnSuccessListener { barcode ->
                                 val payload = barcode.rawValue
                                 if (payload == null) error = "The scanned QR code contains no text."
                                 else acceptScanned(payload)
+                            }
+                            .addOnCanceledListener {
+                                error = "QR scanning was cancelled."
                             }
                             .addOnFailureListener { failure ->
                                 error = "QR scanning failed: ${failure.localizedMessage ?: "scanner unavailable"}"

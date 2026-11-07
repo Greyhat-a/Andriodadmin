@@ -52,6 +52,18 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
 
         NexusCard {
+            SectionTitle("Roles and security")
+            InfoRow("ADMIN / USER", "Local profile labels only")
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            InfoRow("Remote authorization", "Backend not configured")
+            Text(
+                "Local role labels do not grant access to another device. Temporary ADMIN elevation is unavailable until a backend can enforce authorization and the three-hour expiry.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        NexusCard {
             SectionTitle("About NEXUS")
             InfoRow("Version", BuildConfig.VERSION_NAME)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

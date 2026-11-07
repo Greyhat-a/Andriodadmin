@@ -131,6 +131,11 @@ fun MapScreen(devices: List<Device>, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) {
         if (hasLocationPermission()) readLastKnown()
     }
+    LaunchedEffect(devices, selectedDeviceId) {
+        if (selectedDeviceId != null && devices.none { it.id == selectedDeviceId }) {
+            selectedDeviceId = null
+        }
+    }
 
     val selectedDevice = devices.firstOrNull { it.id == selectedDeviceId }
     val showingPhoneLocation = selectedDeviceId == null
@@ -233,7 +238,7 @@ private fun OpenStreetMap(location: DisplayLocation, modifier: Modifier = Modifi
         modifier = modifier.height(340.dp),
         factory = { context ->
             WebView(context).apply {
-                settings.javaScriptEnabled = false
+                settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
                 webViewClient = WebViewClient()
                 loadUrl(url)

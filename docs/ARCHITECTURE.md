@@ -6,24 +6,27 @@ One Android APK, two roles. An **ADMIN** device manages the account's enrolled d
 
 ## 2. Client architecture (Android)
 
-The current app is a single Gradle module `:app`. Its implemented foundation is
-Kotlin, Jetpack Compose, Material 3, and Navigation Compose; roadmap data is
-kept in `core/`, and theme, navigation, and screen code are separated by
-package. The planned product architecture is MVVM with unidirectional data
-flow, Coroutines, and Flow, to be introduced with feature state and services.
+The app is a single Gradle module `:app`, built with Kotlin, Jetpack Compose,
+Material 3, and Navigation Compose. Device state is exposed through a
+`StateFlow`-backed repository and ViewModel; Android-private persistence is
+isolated behind store interfaces. Pairing validation and transfer history are
+separate from UI code. The app has no authentication or networking backend.
 
 ```
 com.nexus.app
-  core/        shared models and utilities (Roadmap today)
+  core/        device, pairing, transfer, academy models/repositories, Roadmap
+  data/        SharedPreferences-backed local data stores
   ui/theme/    colour, typography, NexusTheme (follows system light/dark)
   ui/navigation/  Destination, NexusApp (bottom navigation)
-  ui/screens/  screens and shared components
-  -- added in later phases --
+  ui/screens/  functional Compose screens and shared components
+  -- future backend integration --
   auth/ pairing/ roles/ monitoring/ battery/ location/ remote/ files/
   notifications/ academy/ settings/ security/
 ```
 
-Rules: no business logic in Activities or composables; every screen reads state from a ViewModel; every privileged action is authorised on the server, never only in the UI.
+Rules: business validation lives in core repositories/protocol objects; device
+UI state is collected from a ViewModel; every privileged action must be
+authorized on a server, never only in the UI.
 
 ## 3. Backend (not built yet)
 
@@ -48,7 +51,10 @@ Decision needed from the owner before Phase 2: a Firebase project, and whether t
 - A **TURN server** for remote sessions across networks (self-hosted coturn or a hosted TURN provider).
 - A **domain you control** for App Links, serving `/.well-known/assetlinks.json` and the invitation landing page.
 - A **release signing keystore**, stored only in GitHub Secrets.
-- A **Google Maps API key** (or an OpenStreetMap-based map) for Phase 6.
+- The current **OpenStreetMap** map needs network connectivity but no API key.
+  Remote device markers still require the backend and explicit owner consent.
+- Google Play services on the device for the system QR scanner. QR generation
+  uses the local ZXing library and does not need an API key.
 
 ## 5. Android restrictions that shape the design
 
@@ -62,20 +68,45 @@ Decision needed from the owner before Phase 2: a Firebase project, and whether t
 - **Installed-app listing** needs `QUERY_ALL_PACKAGES`, which Google Play restricts; direct APK distribution is not affected, but the launch-app feature is limited to apps that expose a launcher intent.
 - **Installing from a link** requires the user to allow "install unknown apps" for their browser or file manager. NEXUS cannot do that for them.
 - **Temporary ADMIN cannot change any of the above.** It grants backend authorisation only, never Android permissions or root.
+- **Current-device location** requires the user to grant coarse or fine location permission when requesting a fix. The app distinguishes a last-known fix from a refreshed fix and does not upload it.
+- **File selection** uses Android's Storage Access Framework. User-selected URI grants and metadata are local; no file bytes are transferred to another device.
 
-## 6. Phased plan
+## 6. Implemented local behavior and boundaries
+
+- Device registration, rename/edit, role assignment, search, role filters,
+  sorting, details and confirmed deletion persist in app-private preferences.
+  New profiles have unknown connection status and no battery/last-seen values.
+- Pairing invitations contain a random 256-bit token and expire after ten
+  minutes. The client checks invitation shape, expiration, complementary roles
+  and duplicate local requests. A server must authenticate the issuer, validate
+  the token, authorize both devices and complete pairing; the UI reports a
+  locally recorded request rather than a successful connection.
+- File selection, file metadata, viewer handoff, transfer-request cancellation
+  and local history work on-device. `DeviceTransferTransport` is the integration
+  seam for a real authenticated transport. Waiting/cancelled states do not
+  claim that file bytes were sent.
+- The map can display this phone's permission-authorized location on
+  OpenStreetMap. A registered profile is not assumed to be this phone, and
+  remote profile selection shows no marker without real shared location data.
+- Academy contains twelve searchable tutorials, category filters and locally
+  saved completion progress.
+- Local ADMIN/USER labels are not security authorization. Temporary ADMIN
+  access is deliberately absent until a backend can enforce the existing
+  three-hour expiry requirement.
+
+## 7. Phased plan
 
 | Phase | Scope | Needs from you |
 |---|---|---|
-| 1 | Foundation, branding, themes, navigation, CI. **Built in this delivery.** | Push to GitHub and run CI |
-| 2 | Authentication, ADMIN and USER roles | Firebase project, `google-services.json` |
-| 3 | QR and link pairing, App Links | Domain for App Links |
+| 1 | Foundation, branding, themes, navigation, CI. **Built.** | Push to GitHub and run CI |
+| 2 | Authentication, server-authorized ADMIN and USER experiences | Firebase project, `google-services.json` |
+| 3 | Trusted QR/link invitations, App Links and remote enrollment. Local QR foundation exists. | Backend and domain for App Links |
 | 4 | Temporary ADMIN: passkey, three-hour server-enforced expiry, renewal, revocation, delegation settings | Phase 2 backend |
-| 5 | Device monitoring and battery intelligence | none |
-| 6 | Location | Maps key |
+| 5 | Remote device monitoring and battery intelligence. Local profiles exist. | Backend |
+| 6 | Consent-based remote location. Current-device map foundation exists. | Backend; OpenStreetMap requires no key |
 | 7 | Screen, audio and camera sessions | TURN server |
-| 8 | File transfer | Storage configured |
-| 9 | NEXUS Academy, written against the finished interface | none |
+| 8 | Secure remote file transfer. Local file selection/history exists. | Authenticated transport and storage/backend |
+| 9 | NEXUS Academy, written against the implemented interface. **Built.** | none |
 | 10 | Security hardening, real-device test pass, signed release | Release keystore |
 
-A phase counts as complete only when it builds in CI **and** has been tested on real devices. Until then the in-app roadmap shows it as Planned.
+A phase counts as complete only when it builds in CI **and** has been tested on real devices. Local foundations are identified above; remote/backend phases remain planned.

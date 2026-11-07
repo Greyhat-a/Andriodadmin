@@ -93,7 +93,12 @@ class PairingCoordinator(
             return PairingValidation.MALFORMED
         }
         if (invitation.id in consumedInvitationIds) return PairingValidation.DUPLICATE
-        if (runCatching { Base64.getUrlDecoder().decode(invitation.token).size }.getOrNull() != 32) {
+        val tokenSize = try {
+            Base64.getUrlDecoder().decode(invitation.token).size
+        } catch (_: IllegalArgumentException) {
+            return PairingValidation.MALFORMED
+        }
+        if (tokenSize != 32) {
             return PairingValidation.MALFORMED
         }
         val issuedHash = locallyIssuedTokenHashes[invitation.id]

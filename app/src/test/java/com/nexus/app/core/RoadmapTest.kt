@@ -20,9 +20,9 @@ class RoadmapTest {
     }
 
     @Test
-    fun onlyFoundationIsAvailableInThisBuild() {
+    fun foundationAndAcademyAreAvailableInThisBuild() {
         val available = Roadmap.phases.filter { it.state == PhaseState.AVAILABLE }
-        assertEquals(listOf(1), available.map { it.number })
+        assertEquals(listOf(1, 9), available.map { it.number })
     }
 
     @Test

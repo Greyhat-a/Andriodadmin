@@ -60,7 +60,7 @@ object Roadmap {
         RoadmapPhase(
             9, "NEXUS Academy",
             "Interactive tutorials that match the implemented interface.",
-            PhaseState.PLANNED,
+            PhaseState.AVAILABLE,
         ),
         RoadmapPhase(
             10, "Hardening and release",

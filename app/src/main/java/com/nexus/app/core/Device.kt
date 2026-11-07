@@ -18,7 +18,13 @@ data class Device(
     val connectionStatus: DeviceConnectionStatus = DeviceConnectionStatus.UNKNOWN,
     val batteryPercent: Int? = null,
     val lastSeenEpochMillis: Long? = null,
-)
+) {
+    init {
+        require(id.isNotBlank()) { "A device identifier is required." }
+        require(batteryPercent == null || batteryPercent in 0..100) { "Battery level must be between 0 and 100." }
+        require(lastSeenEpochMillis == null || lastSeenEpochMillis >= 0) { "Last-seen time is invalid." }
+    }
+}
 
 interface DeviceDataStore {
     fun load(): List<Device>
@@ -42,8 +48,12 @@ class LocalDeviceRepository(private val store: DeviceDataStore) : DeviceReposito
         require(cleanName.isNotEmpty()) { "Enter a device name." }
         require(cleanModel.isNotEmpty()) { "Enter a device model." }
 
+        var id: String
+        do {
+            id = UUID.randomUUID().toString()
+        } while (mutableDevices.value.any { it.id == id })
         val device = Device(
-            id = UUID.randomUUID().toString(),
+            id = id,
             name = cleanName,
             model = cleanModel,
             role = role,
