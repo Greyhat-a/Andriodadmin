@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "nexus"
+rootProject.name = "Androidecosystems"
 include(":app")

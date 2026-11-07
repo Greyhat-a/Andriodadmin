@@ -33,25 +33,32 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.1
+        uses: android-actions/setup-android@v4
 
-      - name: Make Gradle Wrapper executable
-        run: chmod +x ./gradlew
+      - name: Install Android SDK packages
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses
+          set -o pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Report toolchain
+      - name: Set up Gradle caching
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate toolchain and wrapper
         run: |
           java -version
-          ./gradlew --version
+          bash ./gradlew --version
 
-      - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+      - name: Clean, test, and build debug APK
+        run: |
+          bash ./gradlew --no-daemon clean
+          bash ./gradlew --no-daemon testDebugUnitTest
+          bash ./gradlew --no-daemon assembleDebug
 
       - name: Verify APK exists and is non-empty
         run: |
-          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
           test -n "$APK"
           test -s "$APK"
           ls -lh "$APK"
@@ -62,8 +69,8 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: Androidecosystems-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -83,13 +90,20 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.1
+        uses: android-actions/setup-android@v4
 
-      - name: Make Gradle Wrapper executable
-        run: chmod +x ./gradlew
+      - name: Install Android SDK packages
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses
+          set -o pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle caching
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Run lint
-        run: ./gradlew --no-daemon lintDebug
+        run: bash ./gradlew --no-daemon lintDebug
 
       - name: Upload lint report
         if: always()
@@ -119,10 +133,17 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.1
+        uses: android-actions/setup-android@v4
 
-      - name: Make Gradle Wrapper executable
-        run: chmod +x ./gradlew
+      - name: Install Android SDK packages
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses
+          set -o pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle caching
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Build APK (release-signed if secrets exist, otherwise debug-signed)
         env:
@@ -139,12 +160,12 @@ jobs:
             export NEXUS_KEYSTORE_PASSWORD="$KS_PASSWORD"
             export NEXUS_KEY_ALIAS="$KS_ALIAS"
             export NEXUS_KEY_PASSWORD="$KS_KEY_PASSWORD"
-            ./gradlew --no-daemon assembleRelease
+            bash ./gradlew --no-daemon assembleRelease
             SRC="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
             KIND="release-signed"
           else
             echo "No signing secrets found: building the debug-signed APK."
-            ./gradlew --no-daemon assembleDebug
+            bash ./gradlew --no-daemon assembleDebug
             SRC="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
             KIND="debug-signed"
           fi
