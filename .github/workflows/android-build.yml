@@ -1,0 +1,161 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test and build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.1
+
+      - name: Make Gradle Wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Report toolchain
+        run: |
+          java -version
+          ./gradlew --version
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Verify APK exists and is non-empty
+        run: |
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          test -s "$APK"
+          ls -lh "$APK"
+          # Best-effort package metadata; does not fail the build.
+          AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$AAPT2" ]; then "$AAPT2" dump badging "$APK" | head -3 || true; fi
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  lint:
+    name: Android lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Kept separate so a lint finding never blocks the installable APK.
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.1
+
+      - name: Make Gradle Wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Run lint
+        run: ./gradlew --no-daemon lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.1
+
+      - name: Make Gradle Wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build APK (release-signed if secrets exist, otherwise debug-signed)
+        env:
+          KS_B64: ${{ secrets.NEXUS_KEYSTORE_BASE64 }}
+          KS_PASSWORD: ${{ secrets.NEXUS_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.NEXUS_KEY_ALIAS }}
+          KS_KEY_PASSWORD: ${{ secrets.NEXUS_KEY_PASSWORD }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASSWORD" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_KEY_PASSWORD" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/nexus-release.jks"
+            export NEXUS_KEYSTORE_PATH="$RUNNER_TEMP/nexus-release.jks"
+            export NEXUS_KEYSTORE_PASSWORD="$KS_PASSWORD"
+            export NEXUS_KEY_ALIAS="$KS_ALIAS"
+            export NEXUS_KEY_PASSWORD="$KS_KEY_PASSWORD"
+            ./gradlew --no-daemon assembleRelease
+            SRC="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+            KIND="release-signed"
+          else
+            echo "No signing secrets found: building the debug-signed APK."
+            ./gradlew --no-daemon assembleDebug
+            SRC="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+            KIND="debug-signed"
+          fi
+          test -n "$SRC"
+          test -s "$SRC"
+          cp "$SRC" "dist/nexus-${TAG}-${KIND}.apk"
+          ls -lh dist
+
+      - name: Create release and attach APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/*.apk --title "NEXUS $TAG" --generate-notes

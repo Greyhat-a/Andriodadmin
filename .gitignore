@@ -1,0 +1,26 @@
+# Gradle / Android build output
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Secrets - never commit
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+.env
+.env.*
+service-account*.json
+
+# OS
+.DS_Store
+Thumbs.db
