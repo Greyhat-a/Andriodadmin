@@ -6,7 +6,11 @@ One Android APK, two roles. An **ADMIN** device manages the account's enrolled d
 
 ## 2. Client architecture (Android)
 
-Single Gradle module `:app` for now. Feature code is separated by package so it can be split into Gradle modules later without rewriting. Kotlin, Jetpack Compose, Material 3, MVVM with unidirectional data flow, Coroutines and Flow.
+The current app is a single Gradle module `:app`. Its implemented foundation is
+Kotlin, Jetpack Compose, Material 3, and Navigation Compose; roadmap data is
+kept in `core/`, and theme, navigation, and screen code are separated by
+package. The planned product architecture is MVVM with unidirectional data
+flow, Coroutines, and Flow, to be introduced with feature state and services.
 
 ```
 com.nexus.app
