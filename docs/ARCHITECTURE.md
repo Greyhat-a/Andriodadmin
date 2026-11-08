@@ -86,8 +86,9 @@ Decision needed from the owner before Phase 2: a Firebase project, and whether t
   seam for a real authenticated transport. Waiting/cancelled states do not
   claim that file bytes were sent.
 - The map can display this phone's permission-authorized location on
-  OpenStreetMap. A registered profile is not assumed to be this phone, and
-  remote profile selection shows no marker without real shared location data.
+  OpenStreetMap after a separate opt-in that sends coordinates to the map
+  provider. A registered profile is not assumed to be this phone, and remote
+  profile selection shows no marker without real shared location data.
 - Academy contains twelve searchable tutorials, category filters and locally
   saved completion progress.
 - Local ADMIN/USER labels are not security authorization. Temporary ADMIN

@@ -41,19 +41,20 @@ fun FilesScreen(repository: LocalTransferRepository, modifier: Modifier = Modifi
     val records by repository.records.collectAsState()
     var error by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val failures = mutableListOf<String>()
         uris.forEach { uri ->
             try {
                 context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 repository.addSelection(context.resolveLocalFile(uri))
-                error = null
             } catch (failure: SecurityException) {
-                error = "NEXUS could not retain access to ${uri.lastPathSegment ?: "the selected file"}."
+                failures += "NEXUS could not retain access to ${uri.lastPathSegment ?: "the selected file"}."
             } catch (failure: IllegalStateException) {
-                error = failure.message ?: "The selected file could not be saved."
+                failures += failure.message ?: "The selected file could not be saved."
             } catch (failure: IllegalArgumentException) {
-                error = failure.message ?: "The selected file could not be read."
+                failures += failure.message ?: "The selected file could not be read."
             }
         }
+        error = failures.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
     Column(

@@ -31,6 +31,7 @@ enum class PairingValidation {
     MALFORMED,
     EXPIRED,
     SAME_ROLE,
+    SELF_INVITATION,
     DUPLICATE,
 }
 
@@ -40,19 +41,22 @@ class PairingCoordinator(
     private val random: SecureRandom = SecureRandom(),
 ) {
     private val consumedInvitationIds = mutableSetOf<String>()
-    private val locallyIssuedTokenHashes = mutableMapOf<String, ByteArray>()
+    private val locallyIssuedInvitations = mutableMapOf<String, IssuedInvitation>()
 
     fun createInvitation(role: DeviceRole): PairingInvitation {
+        val issuedAt = now()
+        locallyIssuedInvitations.entries.removeAll { it.value.expiresAtEpochMillis <= issuedAt }
         val tokenBytes = ByteArray(32).also(random::nextBytes)
         val token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes)
         val id = UUID.randomUUID().toString()
-        locallyIssuedTokenHashes[id] = sha256(token)
-        return PairingInvitation(
+        val invitation = PairingInvitation(
             id = id,
             token = token,
             role = role,
-            expiresAtEpochMillis = now() + PAIRING_INVITATION_LIFETIME_MILLIS,
+            expiresAtEpochMillis = issuedAt + PAIRING_INVITATION_LIFETIME_MILLIS,
         )
+        locallyIssuedInvitations[id] = IssuedInvitation(sha256(token), role, invitation.expiresAtEpochMillis)
+        return invitation
     }
 
     fun parse(payload: String): PairingInvitation? {
@@ -86,7 +90,6 @@ class PairingCoordinator(
     }
 
     fun validate(invitation: PairingInvitation, localRole: DeviceRole): PairingValidation {
-        if (invitation.role == localRole) return PairingValidation.SAME_ROLE
         val currentTime = now()
         if (invitation.expiresAtEpochMillis <= currentTime) return PairingValidation.EXPIRED
         if (invitation.expiresAtEpochMillis - currentTime > PAIRING_INVITATION_LIFETIME_MILLIS) {
@@ -101,10 +104,17 @@ class PairingCoordinator(
         if (tokenSize != 32) {
             return PairingValidation.MALFORMED
         }
-        val issuedHash = locallyIssuedTokenHashes[invitation.id]
-        if (issuedHash != null && !MessageDigest.isEqual(issuedHash, sha256(invitation.token))) {
-            return PairingValidation.MALFORMED
+        val issued = locallyIssuedInvitations[invitation.id]
+        if (issued != null) {
+            if (invitation.role != issued.role ||
+                invitation.expiresAtEpochMillis != issued.expiresAtEpochMillis ||
+                !MessageDigest.isEqual(issued.tokenHash, sha256(invitation.token))
+            ) {
+                return PairingValidation.MALFORMED
+            }
+            return PairingValidation.SELF_INVITATION
         }
+        if (invitation.role == localRole) return PairingValidation.SAME_ROLE
         return PairingValidation.READY
     }
 
@@ -119,4 +129,10 @@ class PairingCoordinator(
 
     private fun sha256(token: String): ByteArray =
         MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
+
+    private data class IssuedInvitation(
+        val tokenHash: ByteArray,
+        val role: DeviceRole,
+        val expiresAtEpochMillis: Long,
+    )
 }

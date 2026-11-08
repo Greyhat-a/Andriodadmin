@@ -10,6 +10,7 @@ import android.location.LocationManager
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import android.webkit.WebResourceRequest
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Switch
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +58,9 @@ fun MapScreen(devices: List<Device>, modifier: Modifier = Modifier) {
     var expanded by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var mapError by remember { mutableStateOf<String?>(null) }
+    var mapReloadKey by remember { mutableStateOf(0) }
+    var allowMapLocationRequest by remember { mutableStateOf(false) }
 
     fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -93,7 +98,7 @@ fun MapScreen(devices: List<Device>, modifier: Modifier = Modifier) {
         loading = true
         error = null
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+        val providers = listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
             .filter { provider ->
                 try {
                     manager.isProviderEnabled(provider)
@@ -107,14 +112,18 @@ fun MapScreen(devices: List<Device>, modifier: Modifier = Modifier) {
             return
         }
         val provider = providers.first()
+        lateinit var listener: LocationListener
+        listener = LocationListener { fix ->
+            manager.removeUpdates(listener)
+            location = fix.toDisplayLocation(isCurrentFix = true)
+            loading = false
+            error = null
+        }
         try {
-            manager.requestSingleUpdate(provider, LocationListener { fix ->
-                location = fix.toDisplayLocation(isCurrentFix = true)
-                loading = false
-                error = null
-            }, Looper.getMainLooper())
+            manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
             Handler(Looper.getMainLooper()).postDelayed({
                 if (loading) {
+                    manager.removeUpdates(listener)
                     loading = false
                     error = "No fresh location fix arrived. The last-known fix, if shown, has not been refreshed."
                 }
@@ -147,7 +156,7 @@ fun MapScreen(devices: List<Device>, modifier: Modifier = Modifier) {
     ) {
         Text("Map", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "OpenStreetMap · current location is shown only for this phone, after your permission.",
+            "The phone's location stays local unless you explicitly share its coordinates with OpenStreetMap to center the map.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column {
@@ -187,11 +196,39 @@ fun MapScreen(devices: List<Device>, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
             )
             Text("${fix.latitude}, ${fix.longitude}", style = MaterialTheme.typography.bodySmall)
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Switch(
+                    checked = allowMapLocationRequest,
+                    onCheckedChange = { allowMapLocationRequest = it },
+                )
+                Text("Send coordinates to OpenStreetMap to center the map")
+            }
         } else if (showingPhoneLocation && !hasLocationPermission()) {
             Text("No location is shown until you explicitly grant access.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (showingPhoneLocation && location != null) {
-            OpenStreetMap(location = location!!, modifier = Modifier.fillMaxWidth().weight(1f))
+        if (showingPhoneLocation && location != null && allowMapLocationRequest) {
+            OpenStreetMap(
+                location = location!!,
+                reloadKey = mapReloadKey,
+                onError = { mapError = it },
+                onLoaded = { mapError = null },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+            mapError?.let {
+                Text("Map could not be loaded: $it", color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = { mapReloadKey++ }) { Text("Retry map") }
+            }
+        } else if (showingPhoneLocation && location != null) {
+            NexusCard {
+                Text("Map not loaded", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Your location has not been sent to OpenStreetMap. Turn on the switch above to load map tiles centered on this fix.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         } else {
             NexusCard {
                 Text(
@@ -225,14 +262,20 @@ private fun RowMapActions(hasPermission: Boolean, loading: Boolean, onRequest: (
 }
 
 @Composable
-private fun OpenStreetMap(location: DisplayLocation, modifier: Modifier = Modifier) {
-    val url = remember(location.latitude, location.longitude) {
+private fun OpenStreetMap(
+    location: DisplayLocation,
+    reloadKey: Int,
+    onError: (String) -> Unit,
+    onLoaded: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val url = remember(location.latitude, location.longitude, reloadKey) {
         val lat = location.latitude.coerceIn(-85.0, 85.0)
         val lon = location.longitude.coerceIn(-180.0, 180.0)
         val delta = 0.02
         "https://www.openstreetmap.org/export/embed.html?" +
             "bbox=${lon - delta}%2C${lat - delta}%2C${lon + delta}%2C${lat + delta}" +
-            "&layer=mapnik&marker=$lat%2C$lon"
+            "&layer=mapnik&marker=$lat%2C$lon&nexus_retry=$reloadKey"
     }
     AndroidView(
         modifier = modifier.height(340.dp),
@@ -240,7 +283,37 @@ private fun OpenStreetMap(location: DisplayLocation, modifier: Modifier = Modifi
             WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
-                webViewClient = WebViewClient()
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String) {
+                        onLoaded()
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        webError: android.webkit.WebResourceError,
+                    ) {
+                        if (request.isForMainFrame) onError(webError.description.toString())
+                    }
+
+                    override fun onReceivedHttpError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        response: android.webkit.WebResourceResponse,
+                    ) {
+                        if (request.isForMainFrame) onError("OpenStreetMap returned HTTP ${response.statusCode}.")
+                    }
+
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): Boolean {
+                        val host = request.url.host.orEmpty()
+                        return host != "openstreetmap.org" && !host.endsWith(".openstreetmap.org")
+                    }
+                }
                 loadUrl(url)
             }
         },

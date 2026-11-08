@@ -39,9 +39,9 @@ for the protocol boundary and backend requirements.
   for shape, roles, duplicate use and expiry. A backend is required for trusted
   invitation issuance, authorization, revocation and completed pairing.
 - **Map:** OpenStreetMap is displayed in a WebView after the user grants Android
-  location permission. It needs network access but no map API key. Only this
-  phone's current/last-known location is shown; remote markers require backend
-  location data and owner consent.
+  location permission and separately opts in to sending coordinates to center
+  the map. It needs network access but no map API key. Remote markers require
+  backend location data and owner consent.
 - **Files:** Android's system picker grants access to selected files and NEXUS
   records local metadata/history. A transfer request remains pending; no remote
   file transfer transport or backend is configured.

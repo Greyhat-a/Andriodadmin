@@ -57,7 +57,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             InfoRow("Remote authorization", "Backend not configured")
             Text(
-                "Local role labels do not grant access to another device. Temporary ADMIN elevation is unavailable until a backend can enforce authorization and the three-hour expiry.",
+                "Local role labels do not grant access to another device. Temporary ADMIN elevation is unavailable until a backend can enforce authorization and the three-hour expiry. Location is not shared with a remote device; centering the map on OpenStreetMap requires a separate opt-in.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

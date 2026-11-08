@@ -39,9 +39,9 @@ class DeviceRepositoryTest {
 
     @Test
     fun repositoryReloadsSavedDevicesFromItsDataStore() {
-        val store = InMemoryDeviceDataStore()
+        val store = EncodedDeviceDataStore()
         val original = LocalDeviceRepository(store)
-        val registered = original.register("Office", "Phone", DeviceRole.ADMIN)
+        val registered = original.register("Office | west\nfloor", "Phone | model", DeviceRole.ADMIN)
 
         val restored = LocalDeviceRepository(store)
 
@@ -69,5 +69,15 @@ private class InMemoryDeviceDataStore : DeviceDataStore {
 
     override fun save(devices: List<Device>) {
         data = devices.toList()
+    }
+}
+
+private class EncodedDeviceDataStore : DeviceDataStore {
+    private var serialized = ""
+
+    override fun load(): List<Device> = DeviceRecordCodec.decode(serialized)
+
+    override fun save(devices: List<Device>) {
+        serialized = DeviceRecordCodec.encode(devices)
     }
 }

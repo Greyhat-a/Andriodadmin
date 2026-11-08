@@ -21,6 +21,8 @@ data class Device(
 ) {
     init {
         require(id.isNotBlank()) { "A device identifier is required." }
+        require(name.isNotBlank()) { "A device name is required." }
+        require(model.isNotBlank()) { "A device model is required." }
         require(batteryPercent == null || batteryPercent in 0..100) { "Battery level must be between 0 and 100." }
         require(lastSeenEpochMillis == null || lastSeenEpochMillis >= 0) { "Last-seen time is invalid." }
     }

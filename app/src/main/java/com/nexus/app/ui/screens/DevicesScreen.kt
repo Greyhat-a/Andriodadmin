@@ -441,7 +441,7 @@ private fun PairingDialog(pairingCoordinator: PairingCoordinator, onDismiss: () 
                                 error = "QR scanning failed: ${failure.localizedMessage ?: "scanner unavailable"}"
                             }
                     } catch (failure: SecurityException) {
-                        error = "Camera permission is required to scan an invitation."
+                        error = "Google Play services could not access the scanner."
                     } catch (failure: IllegalStateException) {
                         error = "QR scanner is unavailable on this device."
                     }
@@ -453,10 +453,11 @@ private fun PairingDialog(pairingCoordinator: PairingCoordinator, onDismiss: () 
                     if (validation == PairingValidation.READY) {
                         Button(onClick = {
                             try {
-                                pairingCoordinator.createRequest(invite, localRole)
+                                val request = pairingCoordinator.createRequest(invite, localRole)
                                 validation = PairingValidation.DUPLICATE
-                                message = "Pairing request recorded locally. The devices are not paired; a backend must verify and authorize the request."
+                                message = "Pairing request accepted for this session (${request.invitationId}). The devices are not paired; a backend must verify and authorize the request."
                             } catch (failure: IllegalArgumentException) {
+                                validation = pairingCoordinator.validate(invite, localRole)
                                 error = failure.message
                             }
                         }) { Text("Confirm pairing request") }
@@ -475,6 +476,7 @@ private fun validationMessage(validation: PairingValidation): String = when (val
     PairingValidation.MALFORMED -> "This is not a valid NEXUS invitation."
     PairingValidation.EXPIRED -> "This invitation has expired."
     PairingValidation.SAME_ROLE -> "Pairing requires one ADMIN and one USER role."
+    PairingValidation.SELF_INVITATION -> "This invitation was created on this device. Scan the other device's invitation instead."
     PairingValidation.DUPLICATE -> "This invitation has already been used for a local request."
 }
 

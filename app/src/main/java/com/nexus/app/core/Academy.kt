@@ -49,7 +49,8 @@ object AcademyContent {
             "Open Map and choose Allow location access.",
             "Android may offer approximate or precise access; choose deliberately.",
             "Choose Refresh location to request a fresh fix. The map distinguishes a fresh fix from the last-known fix.",
-            "Location is not sent to another device in this build. Revoke NEXUS access in Android Settings at any time.",
+            "To load a map centered on the fix, separately opt in to sending its coordinates to OpenStreetMap. Otherwise the coordinates stay on this phone.",
+            "Location is not sent to another NEXUS device in this build. Revoke Android permission at any time.",
         )),
         Tutorial("battery", "Battery monitoring", "Devices", "Understand battery data in this build.", listOf(
             "The device list does not invent remote battery readings.",
