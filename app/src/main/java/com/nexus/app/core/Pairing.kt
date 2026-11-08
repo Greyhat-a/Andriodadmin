@@ -26,6 +26,11 @@ data class PairingRequest(
     val createdAtEpochMillis: Long,
 )
 
+interface PairingRequestStore {
+    fun loadConsumedInvitations(): Map<String, Long>
+    fun saveConsumedInvitations(expirationsById: Map<String, Long>)
+}
+
 enum class PairingValidation {
     READY,
     MALFORMED,
@@ -39,8 +44,9 @@ enum class PairingValidation {
 class PairingCoordinator(
     private val now: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
+    private val requestStore: PairingRequestStore = InMemoryPairingRequestStore(),
 ) {
-    private val consumedInvitationIds = mutableSetOf<String>()
+    private val consumedInvitationExpirations = requestStore.loadConsumedInvitations().toMutableMap()
     private val locallyIssuedInvitations = mutableMapOf<String, IssuedInvitation>()
 
     fun createInvitation(role: DeviceRole): PairingInvitation {
@@ -95,7 +101,9 @@ class PairingCoordinator(
         if (invitation.expiresAtEpochMillis - currentTime > PAIRING_INVITATION_LIFETIME_MILLIS) {
             return PairingValidation.MALFORMED
         }
-        if (invitation.id in consumedInvitationIds) return PairingValidation.DUPLICATE
+        if (consumedInvitationExpirations[invitation.id]?.let { it > currentTime } == true) {
+            return PairingValidation.DUPLICATE
+        }
         val tokenSize = try {
             Base64.getUrlDecoder().decode(invitation.token).size
         } catch (_: IllegalArgumentException) {
@@ -123,8 +131,15 @@ class PairingCoordinator(
         require(validate(invitation, localRole) == PairingValidation.READY) {
             "This invitation is invalid, expired, duplicated, or uses the same role."
         }
-        consumedInvitationIds += invitation.id
-        return PairingRequest(invitation.id, localRole, invitation.role, now())
+        val currentTime = now()
+        val activeInvitations = consumedInvitationExpirations
+            .filterValues { it > currentTime }
+            .toMutableMap()
+            .apply { put(invitation.id, invitation.expiresAtEpochMillis) }
+        requestStore.saveConsumedInvitations(activeInvitations)
+        consumedInvitationExpirations.clear()
+        consumedInvitationExpirations.putAll(activeInvitations)
+        return PairingRequest(invitation.id, localRole, invitation.role, currentTime)
     }
 
     private fun sha256(token: String): ByteArray =
@@ -135,4 +150,14 @@ class PairingCoordinator(
         val role: DeviceRole,
         val expiresAtEpochMillis: Long,
     )
+}
+
+private class InMemoryPairingRequestStore : PairingRequestStore {
+    private var expirationsById = emptyMap<String, Long>()
+
+    override fun loadConsumedInvitations(): Map<String, Long> = expirationsById.toMap()
+
+    override fun saveConsumedInvitations(expirationsById: Map<String, Long>) {
+        this.expirationsById = expirationsById.toMap()
+    }
 }
