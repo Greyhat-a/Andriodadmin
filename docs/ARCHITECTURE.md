@@ -78,9 +78,11 @@ Decision needed from the owner before Phase 2: a Firebase project, and whether t
   New profiles have unknown connection status and no battery/last-seen values.
 - Pairing invitations contain a random 256-bit token and expire after ten
   minutes. The client checks invitation shape, expiration, complementary roles
-  and duplicate local requests. A server must authenticate the issuer, validate
-  the token, authorize both devices and complete pairing; the UI reports a
-  locally recorded request rather than a successful connection.
+  and duplicate local requests; consumed invitation IDs persist on-device so
+  they cannot be reused after restarting the app. A server must authenticate
+  the issuer, validate the token, authorize both devices and complete pairing;
+  the UI reports a locally recorded request rather than a successful
+  connection.
 - File selection, file metadata, viewer handoff, transfer-request cancellation
   and local history work on-device. `DeviceTransferTransport` is the integration
   seam for a real authenticated transport. Waiting/cancelled states do not

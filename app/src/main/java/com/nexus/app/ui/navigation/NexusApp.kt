@@ -28,6 +28,7 @@ import com.nexus.app.core.LocalDeviceRepository
 import com.nexus.app.core.LocalTransferRepository
 import com.nexus.app.core.PairingCoordinator
 import com.nexus.app.data.SharedPreferencesDeviceDataStore
+import com.nexus.app.data.SharedPreferencesPairingRequestStore
 import com.nexus.app.data.SharedPreferencesTransferHistoryStore
 
 @Composable
@@ -42,7 +43,9 @@ fun NexusApp() {
     val transferRepository = remember(preferences) {
         LocalTransferRepository(SharedPreferencesTransferHistoryStore(preferences))
     }
-    val pairingCoordinator = remember { PairingCoordinator() }
+    val pairingCoordinator = remember(preferences) {
+        PairingCoordinator(requestStore = SharedPreferencesPairingRequestStore(preferences))
+    }
     val devices by deviceRepository.devices.collectAsState()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()

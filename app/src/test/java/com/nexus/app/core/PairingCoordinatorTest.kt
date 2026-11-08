@@ -24,7 +24,8 @@ class PairingCoordinatorTest {
     fun confirmationConsumesInvitationAndPreventsDuplicates() {
         val issuer = PairingCoordinator(now = { NOW })
         val invitation = issuer.createInvitation(DeviceRole.USER)
-        val coordinator = PairingCoordinator(now = { NOW })
+        val store = InMemoryPairingRequestStore()
+        val coordinator = PairingCoordinator(now = { NOW }, requestStore = store)
         val scanned = coordinator.parse(invitation.toQrPayload())!!
 
         val request = coordinator.createRequest(scanned, DeviceRole.ADMIN)
@@ -32,6 +33,10 @@ class PairingCoordinatorTest {
         assertEquals(DeviceRole.ADMIN, request.localRole)
         assertEquals(DeviceRole.USER, request.remoteRole)
         assertEquals(PairingValidation.DUPLICATE, coordinator.validate(scanned, DeviceRole.ADMIN))
+        assertEquals(
+            PairingValidation.DUPLICATE,
+            PairingCoordinator(now = { NOW }, requestStore = store).validate(scanned, DeviceRole.ADMIN),
+        )
     }
 
     @Test
@@ -67,5 +72,15 @@ class PairingCoordinatorTest {
 
     private companion object {
         const val NOW = 1_000_000L
+    }
+}
+
+private class InMemoryPairingRequestStore : PairingRequestStore {
+    private var consumed = emptyMap<String, Long>()
+
+    override fun loadConsumedInvitations(): Map<String, Long> = consumed.toMap()
+
+    override fun saveConsumedInvitations(expirationsById: Map<String, Long>) {
+        consumed = expirationsById.toMap()
     }
 }
